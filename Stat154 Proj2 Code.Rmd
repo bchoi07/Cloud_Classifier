@@ -1,0 +1,1214 @@
+---
+title: "Project 2 Code"
+author: "Bogeun Choi"
+date: "4/23/2019"
+output: html_document
+---
+
+```{r}
+#install.packages('corrplot')
+#install.packages('randomForest')
+#install.packages('InformationValue')
+#install.packages('e1071')
+#install.packages('ROCR')
+#install.packages('car')
+#install.packages('tidyverse')
+#install.packages('broom')
+#install.packages('FNN')
+#install.packages('LiblineaR')
+
+library(LiblineaR)
+library(tidyverse)
+library(broom)
+library(FNN)
+library(car)
+library(knitr)
+library(caret)
+library(corrplot)
+library(randomForest)
+library(ggplot2)
+library(glmnet)
+library(InformationValue)
+library(MASS)
+library(e1071)
+library(ROCR)
+library(dplyr)
+```
+
+##Reading in data:
+```{r}
+# Read in image data
+image1_df = read.table('image_data/image1.txt')
+image2_df = read.table('image_data/image2.txt')
+image3_df = read.table('image_data/image3.txt')
+
+# Refactor and rename data frames
+image_df_no_factor = rbind(image1_df, image2_df, image3_df)
+colnames(image_df_no_factor) = c('y', 'x', 'label', 'NDAI', 'SD', 'CORR', 'angle_DF', 'angle_CF', 'angle_BF', 'angle_AF', 'angle_AN')
+
+image1_df$V3 = factor(image1_df$V3)
+colnames(image1_df) = c('y', 'x', 'label', 'NDAI', 'SD', 'CORR', 'angle_DF', 'angle_CF', 'angle_BF', 'angle_AF', 'angle_AN')
+
+image2_df$V3 = factor(image2_df$V3)
+colnames(image2_df) = c('y', 'x', 'label', 'NDAI', 'SD', 'CORR', 'angle_DF', 'angle_CF', 'angle_BF', 'angle_AF', 'angle_AN')
+
+image3_df$V3 = factor(image3_df$V3)
+colnames(image3_df) = c('y', 'x', 'label', 'NDAI', 'SD', 'CORR', 'angle_DF', 'angle_CF', 'angle_BF', 'angle_AF', 'angle_AN')
+
+image_df = rbind(image1_df, image2_df, image3_df)
+colnames(image_df) = c('y', 'x', 'label', 'NDAI', 'SD', 'CORR', 'angle_DF', 'angle_CF', 'angle_BF', 'angle_AF', 'angle_AN')
+```
+
+##1b.
+```{r}
+# Creating colored map plots for each image
+ggplot(image1_df, aes(x, y, color = label)) +
+  geom_point(size = 1) + 
+  coord_fixed() + 
+  scale_color_manual(labels = c('no cloud', 'unlabeled', 'cloud'),
+                     values = c("skyblue", "black", "white")) +
+  labs(title = 'Image 1 Map', x = 'x coordinate', y = 'y coordinate', color = 'Expert Label')
+
+ggplot(image2_df, aes(x, y, color = label)) +
+  geom_point(size = 1) + 
+  coord_fixed() + 
+  scale_color_manual(labels = c('no cloud', 'unlabeled', 'cloud'),
+                     values = c("skyblue", "black", "white")) +
+  labs(title = 'Image 2 Map', x = 'x coordinate', y = 'y coordinate', color = 'Expert Label')
+
+ggplot(image3_df, aes(x, y, color = label)) +
+  geom_point(size = 1) + 
+  coord_fixed() + 
+  scale_color_manual(labels = c('no cloud', 'unlabeled', 'cloud'),
+                     values = c("skyblue", "black", "white")) +
+  labs(title = 'Image 3 Map', x = 'x coordinate', y = 'y coordinate', color = 'Expert Label')
+```
+
+```{r}
+# Calculating proportions of each label per image and total
+table(image1_df$label)/sum(table(image1_df$label))
+table(image2_df$label)/sum(table(image2_df$label))
+table(image3_df$label)/sum(table(image3_df$label))
+table(image_df$label)/sum(table(image_df$label))
+```
+
+##1c.
+```{r}
+# Correlation matrix for numeric data
+cor(as.matrix(subset(image_df, select=NDAI:angle_AN)))
+corrplot(cor(as.matrix(subset(image_df, select=NDAI:angle_AN))), type = "upper", tl.col = "black")
+
+# Correlation matrix for numeric data + label
+cor(as.matrix(subset(image_df_no_factor, select=label:angle_AN)))
+corrplot(cor(as.matrix(subset(image_df_no_factor, select=label:angle_AN))), type = "upper", tl.col = "black")
+```
+
+```{r}
+# Creating correlation matrix per label
+cloud_df = image_df[image_df$label == 1,]
+no_cloud_df = image_df[image_df$label == -1,]
+
+cor(as.matrix(subset(cloud_df, select=NDAI:angle_AN)))
+corrplot(cor(as.matrix(subset(cloud_df, select=NDAI:angle_AN))), type = "upper", tl.col = "black")
+
+cor(as.matrix(subset(no_cloud_df, select=NDAI:angle_AN)))
+corrplot(cor(as.matrix(subset(no_cloud_df, select=NDAI:angle_AN))), type = "upper", tl.col = "black")
+```
+
+```{r}
+summary(cloud_df)
+summary(no_cloud_df)
+```
+
+```{r}
+# Box plots for each variable per label
+ggplot(image_df, aes(x = label, y = NDAI)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs NDAI', x = 'Expert Label', y = 'NDAI')
+
+ggplot(image_df, aes(x = label, y = SD)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs SD', x = 'Expert Label', y = 'SD')
+
+ggplot(image_df, aes(x = label, y = CORR)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs CORR', x = 'Expert Label', y = 'CORR')
+
+ggplot(image_df, aes(x = label, y = angle_DF)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs angle_DF', x = 'Expert Label', y = 'angle_DF')
+
+ggplot(image_df, aes(x = label, y = angle_CF)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs angle_CF', x = 'Expert Label', y = 'angle_CF')
+
+ggplot(image_df, aes(x = label, y = angle_BF)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs angle_BF', x = 'Expert Label', y = 'angle_BF')
+
+ggplot(image_df, aes(x = label, y = angle_AF)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs angle_AF', x = 'Expert Label', y = 'angle_AF')
+
+ggplot(image_df, aes(x = label, y = angle_AN)) + 
+  geom_boxplot() + 
+  scale_x_discrete(labels = c('No Cloud', 'Unlabeled', 'Cloud')) + 
+  labs(title = 'Expert Label vs angle_AN', x = 'Expert Label', y = 'angle_AN')
+```
+
+
+##2a.
+One way to split data: regions (splitting plots into 16 regions)
+
+```{r}
+# Function to split data (method 1: regions)
+split_data_regions <- function(image1, image2, image3) {
+  # Remove unlabeled points and refactoring
+  image1 = image1[image1$label == -1 | image1$label == 1,]
+  image2 = image2[image2$label == -1 | image2$label == 1,]
+  image3 = image3[image3$label == -1 | image3$label == 1,]
+  
+  image1$label = factor(image1$label)
+  image2$label = factor(image2$label)
+  image3$label = factor(image3$label)
+  
+  # Set bounds
+  x_bounds_img1 = round(seq(min(image1$x), max(image1$x), len=5))
+  y_bounds_img1 = round(seq(min(image1$y), max(image1$y), len=5))
+  
+  x_bounds_img2 = round(seq(min(image2$x), max(image2$x), len=5))
+  y_bounds_img2 = round(seq(min(image2$y), max(image2$y), len=5))
+  
+  x_bounds_img3 = round(seq(min(image3$x), max(image3$x), len=5))
+  y_bounds_img3 = round(seq(min(image3$y), max(image3$y), len=5))
+  
+  region_list = list()
+  counter = 1
+  
+  # Divide up image data into 16 data frames, store into list
+  for(i in 1:4) {
+    for(j in 1:4) {
+      lower_b_x = x_bounds_img1[i]
+      upper_b_x = x_bounds_img1[i+1]
+      lower_b_y = y_bounds_img1[j]
+      upper_b_y = y_bounds_img1[j+1]
+    
+      region_list[[counter]] = image1[image1$x >= lower_b_x & image1$x < upper_b_x & image1$y >= lower_b_y & image1$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  for(i in 1:4) {
+    for(j in 1:4) {
+      lower_b_x = x_bounds_img2[i]
+      upper_b_x = x_bounds_img2[i+1]
+      lower_b_y = y_bounds_img2[j]
+      upper_b_y = y_bounds_img2[j+1]
+      
+      region_list[[counter]] = image2[image2$x >= lower_b_x & image2$x < upper_b_x & image2$y >= lower_b_y & image2$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  for(i in 1:4) {
+    for(j in 1:4) {
+      lower_b_x = x_bounds_img3[i]
+      upper_b_x = x_bounds_img3[i+1]
+      lower_b_y = y_bounds_img3[j]
+      upper_b_y = y_bounds_img3[j+1]
+      
+      region_list[[counter]] = image3[image3$x >= lower_b_x & image3$x < upper_b_x & image3$y >= lower_b_y & image3$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  # Sampling data randomly and combining into sets
+  random_split_list = split(region_list, sample(rep(1:3, c(36, 6, 6))))
+  random_split_list
+}
+
+set.seed(69)
+data_regions = split_data_regions(image1_df, image2_df, image3_df)
+```
+
+Another way: PCA then choose
+
+```{r}
+# Function to split data (method 2: PCA)
+split_data_pca <- function(image1, image2, image3) {
+  # Remove unlabeled points and refactoring
+  image1 = image1[image1$label == -1 | image1$label == 1,]
+  image2 = image2[image2$label == -1 | image2$label == 1,]
+  image3 = image3[image3$label == -1 | image3$label == 1,]
+  
+  image1$label = factor(image1$label)
+  image2$label = factor(image2$label)
+  image3$label = factor(image3$label)
+  
+  # Find PCAs, order from smallest to largest
+  pca_img1 = prcomp(image1[,c(4:11)], center = TRUE, scale. = TRUE)
+  print(summary(pca_img1))
+  pc1_img1_vals = data.frame(pca_img1$x)['PC1']
+  pc1_img1_order_list = order(pc1_img1_vals$PC1)
+  
+  pca_img2 = prcomp(image2[,c(4:11)], center = TRUE, scale. = TRUE)
+  print(summary(pca_img2))
+  pc1_img2_vals = data.frame(pca_img2$x)['PC1']
+  pc1_img2_order_list = order(pc1_img2_vals$PC1)
+  
+  pca_img3 = prcomp(image3[,c(4:11)], center = TRUE, scale. = TRUE)
+  print(summary(pca_img3))
+  pc1_img3_vals = data.frame(pca_img3$x)['PC1']
+  pc1_img3_order_list = order(pc1_img3_vals$PC1)
+  
+  # Evenly dividing number of labels into 16 to seperate
+  x_divisions_img1 = round(seq(0, length(image1$label), len=17))
+  x_divisions_img2 = round(seq(0, length(image2$label), len=17))
+  x_divisions_img3 = round(seq(0, length(image3$label), len=17))
+  
+  division_list = list()
+  counter = 1
+
+  # Dividing up the points in all of the images seperately
+  for(i in 1:16) {
+    lower_b = x_divisions_img1[i] + 1
+    upper_b = x_divisions_img1[i+1]
+    indices = pc1_img1_order_list[lower_b:upper_b]
+      
+    division_list[[counter]] = image1[indices,]
+    counter = counter + 1
+  }
+  
+  for(i in 1:16) {
+    lower_b = x_divisions_img2[i] + 1
+    upper_b = x_divisions_img2[i+1]
+    indices = pc1_img2_order_list[lower_b:upper_b]
+      
+    division_list[[counter]] = image2[indices,]
+    counter = counter + 1
+  }
+  
+  for(i in 1:16) {
+    lower_b = x_divisions_img3[i] + 1
+    upper_b = x_divisions_img3[i+1]
+    indices = pc1_img3_order_list[lower_b:upper_b]
+      
+    division_list[[counter]] = image3[indices,]
+    counter = counter + 1
+  }
+  
+  # Sampling data randomly and combining into sets
+  random_split_list = split(division_list, sample(rep(1:3, c(36, 6, 6))))
+  random_split_list
+}
+set.seed(69)
+data_regions_pca = split_data_pca(image1_df, image2_df, image3_df)
+```
+
+##2b.
+```{r}
+valid_data_binary = do.call('rbind', data_regions[[2]])
+test_data_binary = do.call('rbind', data_regions[[3]])
+
+valid_data_binary_pca = do.call('rbind', data_regions_pca[[2]])
+test_data_binary_pca = do.call('rbind', data_regions_pca[[3]])
+
+sum(valid_data_binary$label == -1)/length(valid_data_binary$label)
+sum(test_data_binary$label == -1)/length(test_data_binary$label)
+
+sum(valid_data_binary_pca$label == -1)/length(valid_data_binary_pca$label)
+sum(test_data_binary_pca$label == -1)/length(test_data_binary_pca$label)
+```
+
+##2c.
+```{r}
+# For split method 1
+train_data_binary = do.call('rbind', data_regions[[1]])
+binary_data = do.call('rbind', list(train_data_binary, valid_data_binary, test_data_binary))
+
+#train_data_subset = subset(train_data_binary, select=label:angle_AN)
+#train_data_subset$label = as.numeric(as.character(train_data_subset$label))
+
+binary_data_subset = subset(binary_data, select=label:angle_AN)
+binary_data_subset$label = as.numeric(as.character(binary_data_subset$label))
+
+linear_fit = lm(label ~ . -1, data=binary_data_subset)
+summary(linear_fit)
+
+x_vals = data.matrix(subset(binary_data_subset, select=NDAI:angle_AN))
+
+ridge_fit = glmnet(x_vals, binary_data_subset$label, alpha = 0, intercept=FALSE)
+cv_ridge_fit = cv.glmnet(x_vals, binary_data_subset$label, alpha = 0)
+best_ridge_lambda = cv_ridge_fit$lambda.min
+
+ridge_coeffs = predict(ridge_fit, s = best_ridge_lambda, type = 'coefficients')
+ridge_coeffs
+
+lasso_fit = glmnet(x_vals, binary_data_subset$label, alpha = 1, intercept=FALSE)
+cv_lasso_fit = cv.glmnet(x_vals, binary_data_subset$label, alpha = 1)
+best_lasso_lambda = cv_lasso_fit$lambda.min
+
+lasso_coeffs = predict(lasso_fit, s = best_lasso_lambda, type = 'coefficients')
+lasso_coeffs
+```
+
+```{r}
+# For split method 1
+coeff_df = data.frame(linear_fit$coefficients, as.matrix(ridge_coeffs)[-1], as.matrix(lasso_coeffs)[-1])
+colnames(coeff_df) = c('linear', 'ridge', 'lasso')
+
+coeff_df$row_names = rownames(coeff_df)
+coeff_df
+
+ggplot(coeff_df, aes(x=row_names, y=linear)) + 
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (linear)', x = 'Variable Name', y = 'Coefficient Size')
+
+ggplot(coeff_df, aes(x=row_names, y=ridge)) + 
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (ridge)', x = 'Variable Name', y = 'Coefficient Size')
+
+ggplot(coeff_df, aes(x=row_names, y=lasso)) +
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (lasso)', x = 'Variable Name', y = 'Coefficient Size')
+```
+
+```{r}
+# For split method 2
+train_data_binary_pca = do.call('rbind', data_regions_pca[[1]])
+binary_data_pca = do.call('rbind', list(test_data_binary_pca, valid_data_binary_pca, test_data_binary_pca))
+
+#train_data_pca_subset = subset(train_data_binary_pca, select=label:angle_AN)
+#train_data_pca_subset$label = as.numeric(as.character(train_data_pca_subset$label))
+
+binary_data_pca_subset = subset(binary_data_pca, select=label:angle_AN)
+binary_data_pca_subset$label = as.numeric(as.character(binary_data_pca_subset$label))
+
+linear_fit = lm(label ~ . -1, data=binary_data_pca_subset)
+summary(linear_fit)
+
+x_vals = data.matrix(subset(binary_data_pca_subset, select=NDAI:angle_AN))
+
+ridge_fit = glmnet(x_vals, binary_data_pca_subset$label, alpha = 0, intercept=FALSE)
+cv_ridge_fit = cv.glmnet(x_vals, binary_data_pca_subset$label, alpha = 0)
+best_ridge_lambda = cv_ridge_fit$lambda.min
+
+ridge_coeffs = predict(ridge_fit, s = best_ridge_lambda, type = 'coefficients')
+ridge_coeffs
+
+lasso_fit = glmnet(x_vals, binary_data_pca_subset$label, alpha = 1, intercept=FALSE)
+cv_lasso_fit = cv.glmnet(x_vals, binary_data_pca_subset$label, alpha = 1)
+best_lasso_lambda = cv_lasso_fit$lambda.min
+
+lasso_coeffs = predict(lasso_fit, s = best_lasso_lambda, type = 'coefficients')
+lasso_coeffs
+```
+
+```{r}
+# For split method 2
+coeff_df = data.frame(linear_fit$coefficients, as.matrix(ridge_coeffs)[-1], as.matrix(lasso_coeffs)[-1])
+colnames(coeff_df) = c('linear', 'ridge', 'lasso')
+
+coeff_df$row_names = rownames(coeff_df)
+coeff_df
+
+ggplot(coeff_df, aes(x=row_names, y=linear)) + 
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (linear)', x = 'Variable Name', y = 'Coefficient Size')
+
+ggplot(coeff_df, aes(x=row_names, y=ridge)) + 
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (ridge)', x = 'Variable Name', y = 'Coefficient Size')
+
+ggplot(coeff_df, aes(x=row_names, y=lasso)) +
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (lasso)', x = 'Variable Name', y = 'Coefficient Size')
+```
+
+##3a.
+```{r}
+set.seed(69)
+# Combining the train and validation sets
+trainVal_data_binary = c(data_regions[[1]], data_regions[[2]])
+trainVal_data_binary_pca = c(data_regions_pca[[1]], data_regions_pca[[2]])
+
+# Setting the k folds (k = 5) for future
+folds = sample(cut(seq(1, length(trainVal_data_binary)), breaks=5, labels=FALSE))
+```
+
+###Logistic Regression
+```{r}
+set.seed(69)
+# Setting new lists for logistic regression
+trainVal_data_log = c(data_regions[[1]], data_regions[[2]])
+trainVal_data_log_pca = c(data_regions_pca[[1]], data_regions_pca[[2]])
+
+test_data_log = data_regions[[3]]
+test_data_log_pca = data_regions_pca[[3]]
+
+# Changing the -1 values to 0 for logistic regression
+for(i in 1:length(trainVal_data_log)) {
+  levels(trainVal_data_log[[i]]$label)[1] <- 0
+  trainVal_data_log[[i]] = trainVal_data_log[[i]]
+  
+  levels(trainVal_data_log_pca[[i]]$label)[1] <- 0
+  trainVal_data_log_pca[[i]] = trainVal_data_log_pca[[i]]
+}
+
+for(i in 1:length(test_data_log)) {
+  levels(test_data_log[[i]]$label)[1] <- 0
+  test_data_log[[i]] = test_data_log[[i]]
+  
+  levels(test_data_log_pca[[i]]$label)[1] <- 0
+  test_data_log_pca[[i]] = test_data_log_pca[[i]]
+}
+
+# Setting the k folds (k = 5) for log reg
+lr_folds = sample(cut(seq(1, length(trainVal_data_log)), breaks=5, labels=FALSE))
+```
+
+```{r}
+# Training log reg method for split method 1 (regions)
+set.seed(69)
+lr_loss_list = list()
+
+# Running CV for log reg
+for(i in 1:5) {
+  test_indices = which(lr_folds==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_log[-test_indices])
+  test_data = do.call('rbind', trainVal_data_log[test_indices])
+  test_data_labels = test_data$label
+    
+  log_reg_fit = glm(label ~ ., data = train_data, family = 'binomial')
+  predicted = predict(log_reg_fit, test_data, type="response")
+  predicted = ifelse(predicted > 0.5,1,0)
+
+  loss = mean(predicted == test_data_labels)
+  
+  lr_loss_list[i] = loss
+}
+
+lr_loss_list
+```
+
+```{r}
+# Finding test accuracy for split method 1
+log_reg_fit = glm(label ~ ., data = do.call('rbind', trainVal_data_log), family = 'binomial')
+log_reg_predicted = predict(log_reg_fit, do.call('rbind', test_data_log), type="response")
+log_reg_predicted = ifelse(log_reg_predicted > 0.5,1,0)
+
+loss = mean(log_reg_predicted == do.call('rbind', test_data_log)$label)
+loss
+```
+
+```{r}
+# Training log reg method for split method 2 (PCA)
+set.seed(69)
+lr_loss_list_pca = list()
+
+# Running CV for log reg
+for(i in 1:5) {
+  test_indices = which(lr_folds==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_log_pca[-test_indices])
+  test_data = do.call('rbind', trainVal_data_log_pca[test_indices])
+  test_data_labels = test_data$label
+    
+  log_reg_fit = glm(label ~ ., data = train_data, family = 'binomial')
+  predicted = predict(log_reg_fit, test_data, type="response")
+  predicted = ifelse(predicted > 0.5,1,0)
+
+  loss = mean(predicted == test_data_labels)
+  
+  lr_loss_list_pca[i] = loss
+}
+
+lr_loss_list_pca
+```
+
+```{r}
+# Finding test accuracy for split method 2
+log_reg_fit_pca = glm(label ~ ., data = do.call('rbind', trainVal_data_log_pca), family = 'binomial')
+log_reg_predicted_pca = predict(log_reg_fit_pca, do.call('rbind', test_data_log_pca), type="response")
+log_reg_predicted_pca = ifelse(log_reg_predicted_pca > 0.5,1,0)
+
+loss_pca = mean(log_reg_predicted_pca == do.call('rbind', test_data_log_pca)$label)
+loss_pca
+```
+
+```{r}
+# Testing VIF
+# vif(log_reg_fit)
+vif(log_reg_fit_pca)
+```
+
+```{r}
+# Logit plotting
+lr_numeric_df = subset(do.call('rbind', trainVal_data_log), select=NDAI:angle_AN)
+predictors = colnames(lr_numeric_df)
+log_probs = predict(log_reg_fit, do.call('rbind', trainVal_data_log), type="response")
+
+lr_numeric_df <- lr_numeric_df %>%
+  mutate(logit = log(log_probs/(1-log_probs))) %>%
+  gather(key = 'predictors', value = 'predictor.value', -logit)
+
+lr_numeric_df_subset = do.call('rbind', list(lr_numeric_df[lr_numeric_df$predictors == 'NDAI',][1:10000,], lr_numeric_df[lr_numeric_df$predictors == 'SD',][1:10000,], lr_numeric_df[lr_numeric_df$predictors == 'CORR',][1:10000,], lr_numeric_df[lr_numeric_df$predictors == 'angle_DF',][1:10000,], lr_numeric_df[lr_numeric_df$predictors == 'angle_CF',][1:10000,], lr_numeric_df[lr_numeric_df$predictors == 'angle_BF',][1:10000,], lr_numeric_df[lr_numeric_df$predictors == 'angle_AF',][1:10000,], lr_numeric_df[lr_numeric_df$predictors == 'angle_AN',][1:10000,]))
+
+ggplot(lr_numeric_df_subset, aes(logit, predictor.value))+
+  geom_point(size = 0.5, alpha = 0.5) +
+  geom_smooth(method = "loess") + 
+  theme_bw() + 
+  facet_wrap(~predictors, scales = "free_y")
+```
+
+###LDA
+```{r}
+# LDA method for split method 1 (regions)
+set.seed(69)
+lda_loss_list = list()
+
+# Running CV for LDA
+for(i in 1:5) {
+  test_indices = which(folds==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_binary[-test_indices])
+  test_data = do.call('rbind', trainVal_data_binary[test_indices])
+  test_data_labels = test_data$label
+    
+  lda_fit = lda(label ~ ., data = train_data)
+  predicted = predict(lda_fit, test_data)$class
+  
+  correct = table(test_data_labels, predicted)
+  loss = sum(diag(prop.table(correct)))
+  
+  lda_loss_list[i] = loss
+}
+
+lda_loss_list
+```
+
+```{r}
+# Finding test accuracy for split method 1
+lda_fit = lda(label ~ ., data = do.call('rbind', trainVal_data_binary), CV=FALSE)
+lda_predicted = predict(lda_fit, test_data_binary)$class
+lda_correct = table(test_data_binary$label, lda_predicted)
+lda_loss = sum(diag(prop.table(lda_correct)))
+lda_loss
+```
+
+```{r}
+# LDA method for split method 2 (PCA)
+set.seed(69)
+lda_loss_list_pca = list()
+
+# Running CV for LDA
+for(i in 1:5) {
+  test_indices = which(folds==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_binary_pca[-test_indices])
+  test_data = do.call('rbind', trainVal_data_binary_pca[test_indices])
+  test_data_labels = test_data$label
+    
+  lda_fit = lda(label ~ ., data = train_data, CV=FALSE)
+  predicted = predict(lda_fit, test_data)$class
+  
+  correct = table(test_data_labels, predicted)
+  loss = sum(diag(prop.table(correct)))
+  
+  lda_loss_list_pca[i] = loss
+}
+
+lda_loss_list_pca
+```
+
+```{r}
+# Finding test accuracy for split method 2
+lda_fit_pca = lda(label ~ ., data = do.call('rbind', trainVal_data_binary_pca), CV=FALSE)
+lda_predicted_pca = predict(lda_fit_pca, test_data_binary_pca)$class
+lda_correct_pca = table(test_data_binary_pca$label, lda_predicted_pca)
+lda_loss_pca = sum(diag(prop.table(lda_correct_pca)))
+lda_loss_pca
+```
+
+```{r}
+ggplot(do.call('rbind', trainVal_data_binary), aes(x=NDAI)) + 
+  geom_histogram() +
+  labs(title = 'NDAI Values', x = 'NDAI', y = 'count')
+
+ggplot(do.call('rbind', trainVal_data_binary), aes(x=SD)) + 
+  geom_histogram() +
+  labs(title = 'SD Values', x = 'SD', y = 'count')
+
+ggplot(do.call('rbind', trainVal_data_binary), aes(x=CORR)) + 
+  geom_histogram() +
+  labs(title = 'CORR Values', x = 'CORR', y = 'count')
+
+ggplot(do.call('rbind', trainVal_data_binary), aes(x=angle_AF)) + 
+  geom_histogram() +
+  labs(title = 'angle_AF Values', x = 'angle_AF', y = 'count')
+```
+
+```{r}
+cov(subset(do.call('rbind', trainVal_data_binary), select=NDAI:angle_AN))
+```
+
+###QDA
+```{r}
+# QDA method for split method 1 (regions)
+set.seed(69)
+qda_loss_list = list()
+
+# Running CV for LDA
+for(i in 1:5) {
+  test_indices = which(folds==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_binary[-test_indices])
+  test_data = do.call('rbind', trainVal_data_binary[test_indices])
+  test_data_labels = test_data$label
+    
+  qda_fit = qda(label ~ ., data = train_data, CV=FALSE)
+  predicted = predict(qda_fit, test_data)$class
+  
+  correct = table(test_data_labels, predicted)
+  loss = sum(diag(prop.table(correct)))
+  
+  qda_loss_list[i] = loss
+}
+
+qda_loss_list
+```
+
+```{r}
+# Finding test accuracy for split method 1
+qda_fit = qda(label ~ ., data = do.call('rbind', trainVal_data_binary), CV=FALSE)
+qda_predicted = predict(qda_fit, test_data_binary)$class
+qda_correct = table(test_data_binary$label, qda_predicted)
+qda_loss = sum(diag(prop.table(qda_correct)))
+qda_loss
+```
+
+```{r}
+# QDA method for split method 2 (PCA)
+set.seed(69)
+qda_loss_list_pca = list()
+
+# Running CV for LDA
+for(i in 1:5) {
+  test_indices = which(folds==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_binary_pca[-test_indices])
+  test_data = do.call('rbind', trainVal_data_binary_pca[test_indices])
+  test_data_labels = test_data$label
+    
+  qda_fit = qda(label ~ ., data = train_data, CV=FALSE)
+  predicted = predict(qda_fit, test_data)$class
+  
+  correct = table(test_data_labels, predicted)
+  loss = sum(diag(prop.table(correct)))
+  
+  qda_loss_list_pca[i] = loss
+}
+
+qda_loss_list_pca
+```
+
+```{r}
+# Finding test accuracy for split method 2
+qda_fit_pca = qda(label ~ ., data = do.call('rbind', trainVal_data_binary_pca), CV=FALSE)
+qda_predicted_pca = predict(qda_fit_pca, test_data_binary_pca)$class
+qda_correct_pca = table(test_data_binary_pca$label, qda_predicted_pca)
+qda_loss_pca = sum(diag(prop.table(qda_correct_pca)))
+qda_loss_pca
+```
+
+###SVM
+```{r}
+# Finding hyperparameters (split method 1)
+set.seed(69)
+svm_train_data = do.call('rbind', trainVal_data_binary)[,!(names(do.call('rbind', trainVal_data_binary)) %in% c('label'))]
+svm_train_labels = do.call('rbind', trainVal_data_binary)$label
+svm_test_data = test_data_binary[,!(names(do.call('rbind', trainVal_data_binary)) %in% c('label'))]
+svm_test_labels = test_data_binary$label
+
+bestAcc = 0
+bestCost = NA
+costs = c(1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6)
+
+for(c in costs) {
+  acc = LiblineaR(svm_train_data, svm_train_labels, type=2, cost=c, cross=5)
+  if(acc > bestAcc) {
+    bestCost = c
+    bestAcc = acc
+  }
+}
+
+bestCost
+```
+
+```{r}
+# SVM method for split method 1 (regions)
+set.seed(69)
+svm_loss_list = list()
+
+# Running CV for SVM
+for(i in 1:5) {
+  test_indices = which(folds==i, arr.ind=TRUE)
+  train_data = svm_train_data[-test_indices,]
+  train_data_labels = svm_train_labels[-test_indices]
+  test_data = svm_train_data[test_indices,]
+  test_data_labels = svm_train_labels[test_indices]
+    
+  svm_model = LiblineaR(train_data, train_data_labels, type = 2, cost=1e-4)
+  svm_pred = predict(svm_model, test_data)
+  
+  correct = table(test_data_labels, svm_pred$predictions)
+  loss = sum(diag(prop.table(correct)))
+  
+  svm_loss_list[i] = loss
+}
+
+svm_loss_list
+```
+
+```{r}
+# Finding test accuracy for split method 1
+set.seed(69)
+
+svm_model = LiblineaR(svm_train_data, svm_train_labels, type = 2, cost=1e-5)
+svm_pred = predict(svm_model, svm_test_data)
+
+svm_correct = table(svm_test_labels, svm_pred$predictions)
+svm_loss = sum(diag(prop.table(svm_correct)))
+svm_loss
+```
+
+```{r}
+# Finding hyperparameters (split method 2)
+set.seed(69)
+svm_train_data_pca = do.call('rbind', trainVal_data_binary_pca)[,!(names(do.call('rbind', trainVal_data_binary)) %in% c('label'))]
+svm_train_labels_pca = do.call('rbind', trainVal_data_binary_pca)$label
+svm_test_data_pca = test_data_binary_pca[,!(names(do.call('rbind', trainVal_data_binary)) %in% c('label'))]
+svm_test_labels_pca = test_data_binary_pca$label
+
+bestAcc = 0
+bestCost = NA
+costs = c(1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6)
+
+for(c in costs) {
+  acc = LiblineaR(svm_train_data_pca, svm_train_labels_pca, type=2, cost=c, cross=5)
+  if(acc > bestAcc) {
+    bestCost = c
+    bestAcc = acc
+  }
+}
+
+bestCost
+```
+
+```{r}
+# SVM method for split method 2 (PCA)
+set.seed(69)
+svm_loss_list_pca = list()
+
+# Running CV for SVM
+for(i in 1:5) {
+  test_indices = which(folds==i, arr.ind=TRUE)
+  train_data = svm_train_data_pca[-test_indices,]
+  train_data_labels = svm_train_labels_pca[-test_indices]
+  test_data = svm_train_data_pca[test_indices,]
+  test_data_labels = svm_train_labels_pca[test_indices]
+    
+  svm_model = LiblineaR(train_data, train_data_labels, type = 2, cost=0.001)
+  svm_pred = predict(svm_model, test_data)
+  
+  correct = table(test_data_labels, svm_pred$predictions)
+  loss = sum(diag(prop.table(correct)))
+  
+  svm_loss_list_pca[i] = loss
+}
+
+svm_loss_list_pca
+```
+
+```{r}
+# Finding test accuracy for split method 2
+set.seed(69)
+
+svm_model_pca = LiblineaR(svm_train_data_pca, svm_train_labels_pca, type = 2, cost=0.001)
+svm_pred_pca = predict(svm_model_pca, svm_test_data_pca)
+
+svm_correct_pca = table(svm_test_labels_pca, svm_pred_pca$predictions)
+svm_loss_pca = sum(diag(prop.table(svm_correct_pca)))
+svm_loss_pca
+```
+
+##3b.
+```{r}
+# ROC for logistic regression
+log_reg_pred_roc = predict(log_reg_fit, do.call('rbind', test_data_log), type="response")
+
+lr_pred = prediction(log_reg_pred_roc, do.call('rbind', test_data_log)$label)
+lr_perf = performance(lr_pred, 'tpr', 'fpr')
+plot(lr_perf, colorize=TRUE, main='Logistic Regression ROC Curve')
+
+lr_auc = performance(lr_pred, measure = 'auc')
+lr_auc@y.values[[1]]
+```
+
+```{r}
+# ROC for LDA
+lda_pred_roc = predict(lda_fit, test_data_binary)$posterior[,2]
+
+lda_pred = prediction(lda_pred_roc, test_data_binary$label)
+plot(performance(lda_pred, 'tpr', 'fpr'), colorize=TRUE, main='LDA ROC Curve')
+
+lda_auc = performance(lda_pred, measure = 'auc')
+lda_auc@y.values[[1]]
+```
+
+```{r}
+# ROC for QDA
+qda_pred_roc = predict(qda_fit, test_data_binary)$posterior[,2]
+
+qda_pred = prediction(qda_pred_roc, test_data_binary$label)
+qda_pred
+
+plot(performance(qda_pred, 'tpr', 'fpr'), colorize=TRUE, main='QDA ROC Curve')
+
+qda_auc = performance(qda_pred, measure = 'auc')
+qda_auc@y.values[[1]]
+```
+
+```{r}
+# ROC for SVM
+svm_model = LiblineaR(svm_train_data, svm_train_labels, type = 2, cost=1e-5)
+svm_pred_roc = predict(svm_model, svm_test_data, decisionValues = TRUE)$decisionValues[,1]
+
+svm_pred = prediction((svm_pred_roc + 1)/2, svm_test_labels)
+plot(performance(svm_pred, 'tpr', 'fpr'), colorize=TRUE, main='SVM ROC Curve')
+
+svm_auc = performance(svm_pred, measure = 'auc')
+svm_auc@y.values[[1]]
+```
+
+##4.
+```{r}
+# Variable Importance for QDA (split method 1)
+qda_fit = qda(label ~ ., data = do.call('rbind', trainVal_data_binary), CV=FALSE)
+qda_fit$scaling
+qda_fit$scaling[,10,1]
+
+qda_coeff_df = data.frame(qda_fit$scaling[,10,-1])
+colnames(qda_coeff_df) = c('qda')
+
+qda_coeff_df$row_names = rownames(qda_coeff_df)
+qda_coeff_df
+
+ggplot(qda_coeff_df, aes(x=row_names, y=qda)) + 
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (QDA) for Split Method 1', x = 'Variable Name', y = 'Coefficient Size')
+
+#predict(qda_fit, test_data_binary)
+#qda_correct = table(test_data_binary$label, qda_predicted)
+#qda_loss = sum(diag(prop.table(qda_correct)))
+```
+
+```{r}
+# Variable Importance for LDA (split method 2)
+lda_fit_pca = lda(label ~ ., data = do.call('rbind', trainVal_data_binary_pca), CV=FALSE)
+lda_fit_pca$scaling
+
+lda_coeff_df = data.frame(lda_fit_pca$scaling)
+colnames(lda_coeff_df) = c('qda')
+
+lda_coeff_df$row_names = rownames(lda_coeff_df)
+lda_coeff_df
+
+ggplot(lda_coeff_df, aes(x=row_names, y=qda)) + 
+  geom_bar(stat='identity') +
+  labs(title = 'Variable Importance (LDA) for Split Method 2', x = 'Variable Name', y = 'Coefficient Size')
+```
+
+```{r}
+misclassified = test_data_binary[test_data_binary$label != qda_predicted,]
+summary(misclassified)
+
+ggplot(test_data_binary, aes(angle_DF)) + 
+  geom_histogram() +
+  labs(title = 'angle_DF Histogram (test data)', x = 'angle_DF', y = 'count')
+
+ggplot(misclassified, aes(angle_DF)) + 
+  geom_histogram() +
+  labs(title = 'angle_DF Histogram (misclassified in QDA)', x = 'angle_DF', y = 'count')
+```
+
+```{r}
+misclassified_pca = test_data_binary_pca[test_data_binary_pca$label != lda_predicted_pca,]
+summary(misclassified_pca)
+
+ggplot(test_data_binary_pca, aes(NDAI)) + 
+  geom_histogram() +
+  labs(title = 'NDAI Histogram (test data)', x = 'NDAI', y = 'count')
+
+ggplot(misclassified_pca, aes(NDAI)) + 
+  geom_histogram() +
+  labs(title = 'NDAI Histogram (misclassified in LDA)', x = 'NDAI', y = 'count')
+```
+
+```{r}
+split_data_regions_better <- function(image1, image2, image3) {
+  # Remove unlabeled points and refactoring
+  image1 = image1[image1$label == -1 | image1$label == 1,]
+  image2 = image2[image2$label == -1 | image2$label == 1,]
+  image3 = image3[image3$label == -1 | image3$label == 1,]
+  
+  image1$label = factor(image1$label)
+  image2$label = factor(image2$label)
+  image3$label = factor(image3$label)
+  
+  # Set bounds
+  x_bounds_img1 = round(seq(min(image1$x), max(image1$x), len=9))
+  y_bounds_img1 = round(seq(min(image1$y), max(image1$y), len=9))
+  
+  x_bounds_img2 = round(seq(min(image2$x), max(image2$x), len=9))
+  y_bounds_img2 = round(seq(min(image2$y), max(image2$y), len=9))
+  
+  x_bounds_img3 = round(seq(min(image3$x), max(image3$x), len=9))
+  y_bounds_img3 = round(seq(min(image3$y), max(image3$y), len=9))
+  
+  region_list = list()
+  counter = 1
+  
+  # Divide up image data into 16 data frames, store into list
+  for(i in 1:8) {
+    for(j in 1:8) {
+      lower_b_x = x_bounds_img1[i]
+      upper_b_x = x_bounds_img1[i+1]
+      lower_b_y = y_bounds_img1[j]
+      upper_b_y = y_bounds_img1[j+1]
+    
+      region_list[[counter]] = image1[image1$x >= lower_b_x & image1$x < upper_b_x & image1$y >= lower_b_y & image1$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  for(i in 1:8) {
+    for(j in 1:8) {
+      lower_b_x = x_bounds_img2[i]
+      upper_b_x = x_bounds_img2[i+1]
+      lower_b_y = y_bounds_img2[j]
+      upper_b_y = y_bounds_img2[j+1]
+      
+      region_list[[counter]] = image2[image2$x >= lower_b_x & image2$x < upper_b_x & image2$y >= lower_b_y & image2$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  for(i in 1:8) {
+    for(j in 1:8) {
+      lower_b_x = x_bounds_img3[i]
+      upper_b_x = x_bounds_img3[i+1]
+      lower_b_y = y_bounds_img3[j]
+      upper_b_y = y_bounds_img3[j+1]
+      
+      region_list[[counter]] = image3[image3$x >= lower_b_x & image3$x < upper_b_x & image3$y >= lower_b_y & image3$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  # Sampling data randomly and combining into sets
+  random_split_list = split(region_list, sample(rep(1:3, c(200, 26, 26))))
+  random_split_list
+}
+
+set.seed(69)
+data_regions_better = split_data_regions(image1_df, image2_df, image3_df)
+
+# Combining the train and validation sets
+trainVal_data_binary_better = c(data_regions_better[[1]], data_regions_better[[2]])
+
+# Setting the k folds (k = 5) for future
+folds_better = sample(cut(seq(1, length(trainVal_data_binary_better)), breaks=5, labels=FALSE))
+```
+
+```{r}
+# Better QDA method for split method 1 (regions)
+set.seed(69)
+qda_loss_list2 = list()
+
+# Running CV for QDA
+for(i in 1:5) {
+  test_indices = which(folds_better==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_binary_better[-test_indices])
+  test_data = do.call('rbind', trainVal_data_binary_better[test_indices])
+  test_data_labels = test_data$label
+    
+  qda_fit = qda(label ~ ., data = train_data, CV=FALSE)
+  predicted = predict(qda_fit, test_data)$class
+  
+  correct = table(test_data_labels, predicted)
+  loss = sum(diag(prop.table(correct)))
+  
+  qda_loss_list2[i] = loss
+}
+
+qda_loss_list2
+```
+
+```{r}
+test_data_binary_better = do.call('rbind', data_regions_better[[3]])
+
+# Finding test accuracy for split method 1
+qda_fit2 = qda(label ~ ., data = do.call('rbind', trainVal_data_binary_better), CV=FALSE)
+qda_predicted2 = predict(qda_fit2, test_data_binary_better)$class
+qda_correct2 = table(test_data_binary_better$label, qda_predicted2)
+qda_loss2 = sum(diag(prop.table(qda_correct2)))
+qda_loss2
+```
+
+```{r}
+split_data_pca_better <- function(image1, image2, image3) {
+  # Remove unlabeled points and refactoring
+  image1 = image1[image1$label == -1 | image1$label == 1,]
+  image2 = image2[image2$label == -1 | image2$label == 1,]
+  image3 = image3[image3$label == -1 | image3$label == 1,]
+  
+  image1$label = factor(image1$label)
+  image2$label = factor(image2$label)
+  image3$label = factor(image3$label)
+  
+  # Find PCAs, order from smallest to largest
+  pca_img1 = prcomp(image1[,c(4:11)], center = TRUE, scale. = TRUE)
+  print(summary(pca_img1))
+  pc1_img1_vals = data.frame(pca_img1$x)['PC1']
+  pc2_img1_vals = data.frame(pca_img1$x)['PC2']
+  ordered_PC1_img1 = sort(pc1_img1_vals$PC1)
+  ordered_PC2_img1 = sort(pc2_img1_vals$PC2)
+  
+  pca_img2 = prcomp(image2[,c(4:11)], center = TRUE, scale. = TRUE)
+  print(summary(pca_img2))
+  pc1_img2_vals = data.frame(pca_img2$x)['PC1']
+  pc2_img2_vals = data.frame(pca_img2$x)['PC2']
+  ordered_PC1_img2 = sort(pc1_img2_vals$PC1)
+  ordered_PC2_img2 = sort(pc2_img2_vals$PC2)
+  
+  pca_img3 = prcomp(image3[,c(4:11)], center = TRUE, scale. = TRUE)
+  print(summary(pca_img3))
+  pc1_img3_vals = data.frame(pca_img3$x)['PC1']
+  pc2_img3_vals = data.frame(pca_img3$x)['PC2']
+  ordered_PC1_img3 = sort(pc1_img3_vals$PC1)
+  ordered_PC2_img3 = sort(pc2_img3_vals$PC2)
+  
+  # Set bounds
+  x_bounds_img1 = round(0, length(ordered_PC1_img1), len=5)
+  y_bounds_img1 = round(0, length(ordered_PC2_img1), len=5)
+  
+  x_bounds_img2 = round(0, length(ordered_PC1_img2), len=5)
+  y_bounds_img2 = round(0, length(ordered_PC2_img2), len=5)
+  
+  x_bounds_img3 = round(0, length(ordered_PC1_img3), len=5)
+  y_bounds_img3 = round(0, length(ordered_PC2_img3), len=5)
+  
+  region_list = list()
+  counter = 1
+  
+  # Divide up image data into 16 data frames, store into list
+  for(i in 1:8) {
+    for(j in 1:8) {
+      lower_b_x = ordered_PC1_img1[x_bounds_img1[i]]
+      upper_b_x = ordered_PC1_img1[x_bounds_img1[i+1]]
+      lower_b_y = ordered_PC2_img1[y_bounds_img1[j]]
+      upper_b_y = ordered_PC2_img1[y_bounds_img1[j+1]]
+    
+      region_list[[counter]] = image1[image1$x >= lower_b_x & image1$x < upper_b_x & image1$y >= lower_b_y & image1$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  for(i in 1:8) {
+    for(j in 1:8) {
+      lower_b_x = ordered_PC1_img2[x_bounds_img1[i]]
+      upper_b_x = ordered_PC1_img2[x_bounds_img1[i+1]]
+      lower_b_y = ordered_PC2_img2[y_bounds_img1[j]]
+      upper_b_y = ordered_PC2_img2[y_bounds_img1[j+1]]
+      
+      region_list[[counter]] = image2[image2$x >= lower_b_x & image2$x < upper_b_x & image2$y >= lower_b_y & image2$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  for(i in 1:8) {
+    for(j in 1:8) {
+      lower_b_x = ordered_PC1_img3[x_bounds_img1[i]]
+      upper_b_x = ordered_PC1_img3[x_bounds_img1[i+1]]
+      lower_b_y = ordered_PC2_img3[y_bounds_img1[j]]
+      upper_b_y = ordered_PC2_img3[y_bounds_img1[j+1]]
+      
+      region_list[[counter]] = image3[image3$x >= lower_b_x & image3$x < upper_b_x & image3$y >= lower_b_y & image3$y < upper_b_y,]
+      counter = counter + 1
+    }
+  }
+  
+  # Sampling data randomly and combining into sets
+  random_split_list = split(region_list, sample(rep(1:3, c(36, 6, 6))))
+  random_split_list
+  
+}
+set.seed(69)
+data_regions_pca_better = split_data_pca(image1_df, image2_df, image3_df)
+
+# Combining the train and validation sets
+trainVal_data_binary_pca_better = c(data_regions_better[[1]], data_regions_better[[2]])
+
+# Setting the k folds (k = 5) for future
+folds_pca_better = sample(cut(seq(1, length(trainVal_data_binary_pca_better)), breaks=5, labels=FALSE))
+```
+
+```{r}
+# Better LDA method for split method 2 (PCA)
+set.seed(69)
+lda_loss_list_pca2 = list()
+
+# Running CV for LDA
+for(i in 1:5) {
+  test_indices = which(folds_pca_better==i, arr.ind=TRUE)
+  train_data = do.call('rbind', trainVal_data_binary_pca_better[-test_indices])
+  test_data = do.call('rbind', trainVal_data_binary_pca_better[test_indices])
+  test_data_labels = test_data$label
+    
+  lda_fit = lda(label ~ ., data = train_data, CV=FALSE)
+  predicted = predict(lda_fit, test_data)$class
+  
+  correct = table(test_data_labels, predicted)
+  loss = sum(diag(prop.table(correct)))
+  
+  lda_loss_list_pca2[i] = loss
+}
+
+lda_loss_list_pca2
+
+# Better QDA method for split method 1 (regions)
+set.seed(69)
+qda_loss_list2 = list()
+```
+
+```{r}
+# Finding test accuracy for split method 2 (Better)
+test_data_binary_pca_better = do.call('rbind', data_regions_pca_better[[3]])
+
+# Finding test accuracy for split method 1
+lda_fit_pca2 = lda(label ~ ., data = do.call('rbind', trainVal_data_binary_pca_better), CV=FALSE)
+lda_predicted_pca2 = predict(lda_fit_pca2, test_data_binary_pca_better)$class
+lda_correct_pca2 = table(test_data_binary_pca_better$label, lda_predicted_pca2)
+lda_loss_pca2 = sum(diag(prop.table(lda_correct_pca2)))
+lda_loss_pca2
+```
+
+
+
+
+
+
+
