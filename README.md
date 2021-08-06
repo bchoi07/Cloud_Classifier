@@ -21,14 +21,15 @@ The document was created in Google Docs/Word, so images and values were inserted
 - Image set 11 (variable importance for split methods): code starting on line 897 and 918
 - Image set 12 (misclassified histograms): code starting on line 934 and 947
 
-![Plot 2](images/plot2.png)
-
 And here are where to get the numbers to put into tables:
 - Table 1 (Accuracy of trivial classifier): code starting on line 316
 - Table 2 (Split method 1 accuracies): code starting on line 477 (log reg CV), line 501 (log reg test), line 571 (LDA CV), line 595 (LDA test), line 660 (QDA CV), line 684 (QDA test), line 750 (SVM CV), line 775 (SVM test)
 - Table 3 (Split method 2 accuracies): code starting on line 511 (log reg CV), line 535 (log reg test), line 604 (LDA CV), line 628 (LDA test), line 693 (QDA CV), line 717 (QDA test), line 810 (SVM CV), line 835 (SVM test)
 - Table 4 (Other split method 1 accuracies): code starting on line 1036 (second column)
 - Table 5 (Other split method 2 accuracies): code starting on line 1169 (second column)
+
+Example of classifier analysis below:
+![Plot 2](images/plot2.png)
 
 # Tools
 R was the main language used for analysis. R Studio was used for programming along with packages such as tidyverse and ggplot.
